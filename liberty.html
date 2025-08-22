@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>本地存储安全留言板</title>
+<style>
+  body { margin:0; font-family: 'Segoe UI','Helvetica Neue',sans-serif; background:url('liberty.jpg') no-repeat center center fixed; background-size:cover; color:#333; transition: background 0.3s ease; }
+  body.dark { background-color:#121212; background-image:none; color:#f1f1f1; }
+  body.dark .overlay { background-color:rgba(30,30,30,0.95); color:#f1f1f1; }
+  .overlay { background-color:rgba(255,255,255,0.92); padding:20px; margin:60px auto; width:95%; max-width:720px; border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,0.3); }
+  h2 { text-align:center; font-size:30px; color:#c0392b; margin-bottom:20px; }
+  textarea,input[type="text"]{width:100%; padding:12px; font-size:16px; border-radius:10px; border:1px solid #ccc; transition: box-shadow 0.3s ease;}
+  textarea:focus,input:focus{outline:none; box-shadow:0 0 6px #3498db;}
+  button{margin-top:12px; padding:10px 20px; font-weight:bold; background-color:#e74c3c; color:white; border:none; border-radius:8px; cursor:pointer; transition:background-color 0.3s ease;}
+  button:hover{background-color:#c0392b;}
+  .message{background:#fff; padding:16px; margin-top:20px; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.1); font-size:16px;}
+  .comment{background:#f9f9f9; padding:10px; margin-top:10px; border-left:4px solid #3498db; border-radius:8px; font-size:15px; color:#333;}
+  .timestamp{color:gray; font-size:12px; margin-top:6px;}
+  .buttons{margin-top:10px;}
+  .buttons button{background-color:#3498db; margin-right:10px;}
+  .comments{margin-top:12px;}
+  #themeToggle{position:fixed; top:15px; right:20px; z-index:9999; padding:8px 14px; font-size:14px; border-radius:6px;}
+</style>
+</head>
+<body>
+
+<button id="themeToggle">🌙 夜间模式</button>
+
+<div class="overlay">
+<h2>我们提倡言论自由</h2>
+<textarea id="messageInput" rows="3" placeholder="输入你的言论..." maxlength="200"></textarea><br>
+<button onclick="postMessage()">发表</button>
+<div id="messages"></div>
+</div>
+
+<script>
+const STORAGE_KEY = 'localMessages';
+
+function getCurrentTime(){
+  const now=new Date();
+  return now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0')+' '+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+':'+String(now.getSeconds()).padStart(2,'0');
+}
+
+function escapeHtml(text){
+  const div=document.createElement('div'); div.textContent=text; return div.innerHTML;
+}
+
+function saveMessages(messages){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+}
+
+function loadMessages(){
+  const data=localStorage.getItem(STORAGE_KEY);
+  return data ? JSON.parse(data) : [];
+}
+
+function renderMessages(){
+  const container=document.getElementById("messages");
+  container.innerHTML='';
+  const messages=loadMessages();
+  messages.forEach(msg=>{
+    const div=document.createElement("div"); div.className="message";
+    const contentDiv=document.createElement("div"); contentDiv.style.color=msg.color; contentDiv.innerHTML=escapeHtml(msg.content);
+    const timeDiv=document.createElement("div"); timeDiv.className="timestamp"; timeDiv.textContent=msg.time;
+    const buttonsDiv=document.createElement("div"); buttonsDiv.className="buttons";
+    const likeBtn=document.createElement("button"); likeBtn.innerHTML="👍 "+msg.likes; likeBtn.disabled=msg.votedLike; likeBtn.onclick=()=>{ if(msg.votedLike) return; msg.likes++; msg.votedLike=true; saveMessages(messages); renderMessages(); };
+    const dislikeBtn=document.createElement("button"); dislikeBtn.innerHTML="👎 "+msg.dislikes; dislikeBtn.disabled=msg.votedDislike; dislikeBtn.onclick=()=>{ if(msg.votedDislike) return; msg.dislikes++; msg.votedDislike=true; saveMessages(messages); renderMessages(); };
+    buttonsDiv.appendChild(likeBtn); buttonsDiv.appendChild(dislikeBtn);
+    const commentsDiv=document.createElement("div"); commentsDiv.className="comments";
+    msg.comments.forEach(c=>{
+      const cDiv=document.createElement("div"); cDiv.className="comment";
+      const cContent=document.createElement("div"); cContent.innerHTML=escapeHtml(c.content);
+      const cTime=document.createElement("div"); cTime.className="timestamp"; cTime.textContent=c.time;
+      cDiv.appendChild(cContent); cDiv.appendChild(cTime); commentsDiv.appendChild(cDiv);
+    });
+    const commentInput=document.createElement("input"); commentInput.type="text"; commentInput.placeholder="发表评论..."; commentInput.maxLength=200;
+    commentInput.onkeydown=function(e){ if(e.key==='Enter'){ postComment(msg, this.value.trim()); this.value=''; } };
+    commentsDiv.appendChild(commentInput);
+    div.appendChild(contentDiv); div.appendChild(timeDiv); div.appendChild(buttonsDiv); div.appendChild(commentsDiv);
+    container.appendChild(div);
+  });
+}
+
+function postMessage(){
+  const input=document.getElementById("messageInput");
+  const content=input.value.trim();
+  if(!content) return;
+  const messages=loadMessages();
+  messages.unshift({content, time:getCurrentTime(), color:getRandomColor(), likes:0, dislikes:0, votedLike:false, votedDislike:false, comments:[]});
+  saveMessages(messages);
+  renderMessages();
+  input.value='';
+}
+
+function postComment(msg, content){
+  if(!content) return;
+  msg.comments.push({content, time:getCurrentTime()});
+  saveMessages(loadMessages());
+  renderMessages();
+}
+
+function getRandomColor(){ const colors=['#e74c3c','#27ae60','#2980b9','#8e44ad','#f39c12','#d35400','#2c3e50']; return colors[Math.floor(Math.random()*colors.length)]; }
+
+// 主题切换
+const toggleBtn=document.getElementById('themeToggle');
+function setTheme(mode){ if(mode==='dark'){ document.body.classList.add('dark'); toggleBtn.textContent='☀️ 日间模式'; localStorage.setItem('theme','dark'); }else{ document.body.classList.remove('dark'); toggleBtn.textContent='🌙 夜间模式'; localStorage.setItem('theme','light'); } }
+toggleBtn.addEventListener('click',()=>{ const isDark=document.body.classList.contains('dark'); setTheme(isDark?'light':'dark'); });
+if(localStorage.getItem('theme')==='dark'){ setTheme('dark'); }
+
+renderMessages();
+</script>
+
+</body>
+</html>
